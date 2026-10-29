@@ -1,0 +1,16 @@
+# netwatch — plain cron
+#
+# Install with:  crontab -e   (then paste the two lines below, paths adjusted)
+#
+# Empty stdout = no mail. netwatch only prints when a state *change* survives
+# the debounce, so this cadence is safe with MAILTO set — you get one message
+# per real event, not one per sample.
+#
+# MAILTO=you@example.com
+
+# ── every 5 minutes: collect one sample ──────────────────────────────────────
+*/5 * * * * /usr/bin/python3 /home/YOU/netwatch/netwatch.py --config /home/YOU/netwatch/netwatch.json
+
+# ── optional: fetch the metrics onto disk if you have no pushgateway ─────────
+# (pushgateway is the better path — see README "Prometheus")
+# 2-59/5 * * * * /usr/bin/python3 /home/YOU/netwatch/netwatch.py --print-metrics > /var/lib/node_exporter/textfile/netwatch.prom

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>netwatch</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#131a22; --line:#243040;
+    --txt:#e6edf3; --dim:#8b9bb0; --faint:#5c6b7f;
+    --wired:#31d18a; --ap:#4aa8ff; --wifi:#f2a93b; --wan:#b98cff; --other:#7d8ea3;
+    --bad:#ff5c69; --warn:#f2c14e; --ok:#31d18a;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font:14px/1.5 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:22px 18px 60px}
+  header{display:flex; flex-wrap:wrap; align-items:flex-end; gap:14px; justify-content:space-between;
+         border-bottom:1px solid var(--line); padding-bottom:16px; margin-bottom:22px}
+  h1{margin:0; font-size:19px; letter-spacing:.14em; text-transform:uppercase; font-weight:600}
+  .sub{color:var(--dim); font-size:12px; margin-top:5px}
+  .stamp{text-align:right; font-size:12px; color:var(--dim)}
+  .stamp b{color:var(--txt); font-weight:600}
+  .dot{display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--ok);
+       margin-right:6px; vertical-align:1px; box-shadow:0 0 8px var(--ok)}
+  .dot.warn{background:var(--warn); box-shadow:0 0 8px var(--warn)}
+  .dot.bad{background:var(--bad); box-shadow:0 0 8px var(--bad)}
+  h2{font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--faint);
+     margin:30px 0 12px; font-weight:600}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:15px 16px}
+  /* WAN */
+  .wan{display:flex; flex-wrap:wrap; gap:26px; align-items:center}
+  .wan .big{font-size:40px; font-weight:600; line-height:1; letter-spacing:-.02em}
+  .wan .big small{font-size:14px; color:var(--dim); margin-left:5px; letter-spacing:0}
+  .wan .lbl{font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); margin-bottom:7px}
+  .wan .stat{min-width:104px}
+  .wan .stat .v{font-size:19px; font-weight:600}
+  .wan .stat .v small{font-size:11px; color:var(--dim); font-weight:400}
+  .wan .chart{flex:1; min-width:260px}
+  .note{font-size:11.5px; color:var(--faint); margin-top:11px; line-height:1.6;
+        border-top:1px dashed var(--line); padding-top:10px}
+  /* points */
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(268px,1fr)); gap:12px}
+  .pt{background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--other);
+      border-radius:9px; padding:13px 14px}
+  .pt.wired{border-left-color:var(--wired)}
+  .pt.ap{border-left-color:var(--ap)}
+  .pt.wifi{border-left-color:var(--wifi)}
+  .pt.wan{border-left-color:var(--wan)}
+  .pt.down{background:#1c1416; border-left-color:var(--bad)}
+  .pt.degraded{background:#1c1914}
+  .pt .top{display:flex; justify-content:space-between; align-items:baseline; gap:8px}
+  .pt .nm{font-size:14px; font-weight:600}
+  .pt .kind{font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint)}
+  .pt .ip{font-size:11.5px; color:var(--dim); margin-top:2px}
+  .pt .row{display:flex; gap:14px; margin-top:10px; font-size:12px}
+  .pt .row .k{color:var(--faint); font-size:10px; letter-spacing:.1em; text-transform:uppercase}
+  .pt .row .v{font-weight:600}
+  .pt .spark{display:block; width:100%; height:42px; margin-top:10px}
+  .pt .why{font-size:11px; color:var(--faint); margin-top:8px; line-height:1.5}
+  .pill{display:inline-block; padding:1px 7px; border-radius:99px; font-size:10px;
+        letter-spacing:.1em; text-transform:uppercase; border:1px solid var(--line)}
+  .pill.up{color:var(--ok); border-color:#1d4d38}
+  .pill.degraded{color:var(--warn); border-color:#4d4420}
+  .pill.down{color:var(--bad); border-color:#4d2026}
+  /* services */
+  .svc{display:flex; flex-direction:column; gap:1px}
+  .svc .s{display:flex; align-items:center; gap:10px; padding:8px 2px; border-bottom:1px dashed var(--line)}
+  .svc .s:last-child{border-bottom:0}
+  .svc .s .nm{flex:1; font-size:13px}
+  .svc .s .ms{color:var(--dim); font-size:11.5px}
+  a{color:var(--ap); text-decoration:none; border-bottom:1px solid #1f3f5c}
+  footer{margin-top:34px; padding-top:16px; border-top:1px solid var(--line);
+         font-size:11.5px; color:var(--faint); line-height:1.8}
+  code{color:var(--dim)}
+  .empty{color:var(--faint); font-size:12.5px; padding:10px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1><span class="dot" id="dot"></span>netwatch</h1>
+      <div class="sub" id="sub">loading…</div>
+    </div>
+    <div class="stamp" id="stamp">&nbsp;</div>
+  </header>
+
+  <div id="wan-wrap" style="display:none">
+    <h2>WAN</h2>
+    <div class="card">
+      <div class="wan">
+        <div>
+          <div class="lbl">Downstream</div>
+          <div class="big" id="wan-mbps">—<small>Mbps</small></div>
+        </div>
+        <div class="stat"><div class="lbl">TTFB</div><div class="v" id="wan-ttfb">—</div></div>
+        <div class="stat"><div class="lbl">Measured</div><div class="v" id="wan-when">—</div></div>
+        <div class="chart"><svg class="spark" id="wan-chart" viewBox="0 0 300 54"
+             preserveAspectRatio="none" style="width:100%;height:54px"></svg></div>
+      </div>
+      <div class="note" id="wan-note"></div>
+    </div>
+  </div>
+
+  <h2>Network points</h2>
+  <div class="grid" id="points"></div>
+
+  <div id="svc-wrap" style="display:none">
+    <h2>Services</h2>
+    <div class="card svc" id="services"></div>
+  </div>
+
+  <footer>
+    One ICMP probe series per point (10 packets), one HTTP GET per service, both
+    time-boxed. History is a rolling window in <code>data.json</code>; the page is
+    static and re-reads it on load.
+    <br>
+    Metrics are mirrored to a Prometheus pushgateway as
+    <code>netwatch_up</code>, <code>netwatch_loss_pct</code>,
+    <code>netwatch_latency_avg_ms</code>, <code>netwatch_jitter_ms</code>,
+    <code>netwatch_service_up</code> (job label <code>netwatch</code>).
+    <br>
+    Latency is the ICMP average over <code id="pcount">10</code> packets. Figures for
+    anything that is not on the collector's own segment include the path to it,
+    so they measure the route, not the device alone.
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var DATA_URL = window.NETWATCH_DATA_URL || "data.json";
+  var KIND_LABEL = {
+    wired: "hardwired", ap: "access point", wifi: "wifi", wan: "internet", other: "point"
+  };
+  var KIND_COLOR = {
+    wired: "#31d18a", ap: "#4aa8ff", wifi: "#f2a93b", wan: "#b98cff", other: "#7d8ea3"
+  };
+
+  function el(tag, cls, txt){
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (txt !== undefined && txt !== null) e.textContent = txt;
+    return e;
+  }
+  function svgEl(tag){
+    return document.createElementNS("http://www.w3.org/2000/svg", tag);
+  }
+  function fmt(n, d){
+    if (n === null || n === undefined || isNaN(n)) return "—";
+    return (+n).toFixed(d === undefined ? 1 : d);
+  }
+  function ago(ts){
+    if (!ts) return "—";
+    var s = Math.max(0, Math.round(Date.now()/1000 - ts));
+    if (s < 90) return s + "s ago";
+    if (s < 5400) return Math.round(s/60) + "m ago";
+    return Math.round(s/3600) + "h ago";
+  }
+
+  /* Inline sparkline from [[ts, avg_ms, loss_pct], ...]; nulls become gaps. */
+  function sparkline(spark, color){
+    var W = 220, H = 42, PAD = 3;
+    var svg = svgEl("svg");
+    svg.setAttribute("class", "spark");
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.setAttribute("preserveAspectRatio", "none");
+    var pts = (spark || []).filter(function(p){ return p && p[1] !== null; });
+    if (pts.length < 2){
+      var t = svgEl("text");
+      t.setAttribute("x", W/2); t.setAttribute("y", H/2 + 4);
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("fill", "#5c6b7f"); t.setAttribute("font-size", "11");
+      t.textContent = "collecting…";
+      svg.appendChild(t);
+      return svg;
+    }
+    var vals = pts.map(function(p){ return p[1]; });
+    var max = Math.max.apply(null, vals), min = Math.min.apply(null, vals);
+    if (max === min) { max = min + 1; }
+    var n = spark.length, segs = [], cur = [];
+    spark.forEach(function(p, i){
+      var x = PAD + (i / Math.max(1, n - 1)) * (W - PAD*2);
+      if (!p || p[1] === null){ if (cur.length) { segs.push(cur); cur = []; } return; }
+      var y = H - PAD - ((p[1] - min) / (max - min)) * (H - PAD*2);
+      cur.push([x, y]);
+    });
+    if (cur.length) segs.push(cur);
+    segs.forEach(function(seg){
+      if (seg.length < 2){
+        var c = svgEl("circle");
+        c.setAttribute("cx", seg[0][0]); c.setAttribute("cy", seg[0][1]);
+        c.setAttribute("r", "1.6"); c.setAttribute("fill", color);
+        svg.appendChild(c);
+        return;
+      }
+      var pl = svgEl("polyline");
+      pl.setAttribute("points", seg.map(function(p){ return p[0].toFixed(1)+","+p[1].toFixed(1); }).join(" "));
+      pl.setAttribute("fill", "none");
+      pl.setAttribute("stroke", color);
+      pl.setAttribute("stroke-width", "1.4");
+      pl.setAttribute("stroke-linejoin", "round");
+      pl.setAttribute("vector-effect", "non-scaling-stroke");
+      svg.appendChild(pl);
+      var last = seg[seg.length-1], dot = svgEl("circle");
+      dot.setAttribute("cx", last[0]); dot.setAttribute("cy", last[1]);
+      dot.setAttribute("r", "2.2"); dot.setAttribute("fill", color);
+      svg.appendChild(dot);
+    });
+    return svg;
+  }
+
+  function wanChart(hist){
+    var W = 300, H = 54, PAD = 4;
+    var svg = el("svg");
+    svg.id = "wan-chart";          /* keeps the id after the in-place swap */
+    svg.setAttribute("class", "spark");
+    svg.style.width = "100%"; svg.style.height = "54px";
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.setAttribute("preserveAspectRatio", "none");
+    if (!hist || hist.length < 6){
+      var t = svgEl("text");
+      t.setAttribute("x", W/2); t.setAttribute("y", H/2 + 4);
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("fill", "#5c6b7f"); t.setAttribute("font-size", "9.5");
+      t.textContent = (hist && hist.length)
+        ? "building history · " + hist.length + " readings"
+        : "next reading builds history";
+      svg.appendChild(t);
+      return svg;
+    }
+    var max = Math.max.apply(null, hist.map(function(p){ return p[1]; })) || 1;
+    var bw = (W - PAD*2) / hist.length;
+    hist.forEach(function(p, i){
+      var h = Math.max(1.5, (p[1] / max) * (H - PAD*2));
+      var r = svgEl("rect");
+      r.setAttribute("x", (PAD + i*bw + bw*0.15).toFixed(2));
+      r.setAttribute("y", (H - PAD - h).toFixed(2));
+      r.setAttribute("width", Math.max(1, bw*0.7).toFixed(2));
+      r.setAttribute("height", h.toFixed(2));
+      r.setAttribute("fill", "#b98cff");
+      r.setAttribute("opacity", "0.75");
+      svg.appendChild(r);
+    });
+    return svg;
+  }
+
+  function pointCard(t){
+    var card = el("div", "pt " + (t.kind || "other") + " " + t.status);
+    var top = el("div", "top");
+    top.appendChild(el("div", "nm", t.name));
+    var pill = el("span", "pill " + t.status, t.status);
+    top.appendChild(pill);
+    card.appendChild(top);
+    card.appendChild(el("div", "kind", KIND_LABEL[t.kind] || t.kind || "point"));
+    card.appendChild(el("div", "ip", t.ip));
+
+    var row = el("div", "row");
+    [["avg", t.avg === null ? "—" : fmt(t.avg) + " ms"],
+     ["max", t.max === null ? "—" : fmt(t.max) + " ms"],
+     ["loss", Math.round(t.loss) + "%"]].forEach(function(pair){
+      var cell = el("div");
+      cell.appendChild(el("div", "k", pair[0]));
+      cell.appendChild(el("div", "v", pair[1]));
+      row.appendChild(cell);
+    });
+    card.appendChild(row);
+    card.appendChild(sparkline(t.spark, KIND_COLOR[t.kind] || KIND_COLOR.other));
+    if (t.note) card.appendChild(el("div", "why", t.note));
+    return card;
+  }
+
+  function render(doc){
+    var targets = doc.targets || [];
+    var services = doc.services || [];
+    var bad = targets.filter(function(t){ return t.status === "down"; }).length;
+    var warn = targets.filter(function(t){ return t.status === "degraded"; }).length;
+    var svcDown = services.filter(function(s){ return !s.up; }).length;
+
+    document.title = "netwatch · " + (doc.host || "network health");
+    var dot = document.getElementById("dot");
+    dot.className = "dot" + (bad || svcDown ? " bad" : (warn ? " warn" : ""));
+
+    var hostLabel = doc.host ? doc.host + " · " : "";
+    document.getElementById("sub").textContent =
+      hostLabel + targets.length + " point" + (targets.length === 1 ? "" : "s") + " · " +
+      services.length + " service" + (services.length === 1 ? "" : "s") + " · " +
+      (bad || svcDown ? "something is down" : (warn ? "degraded" : "all clear"));
+
+    var stamp = document.getElementById("stamp");
+    stamp.innerHTML = "";
+    var b = el("b", null, ago(doc.updated_epoch));
+    stamp.appendChild(document.createTextNode("updated "));
+    stamp.appendChild(b);
+    stamp.appendChild(document.createElement("br"));
+    stamp.appendChild(document.createTextNode(doc.updated || ""));
+
+    var grid = document.getElementById("points");
+    grid.innerHTML = "";
+    if (!targets.length){
+      grid.appendChild(el("div", "empty", "No targets configured."));
+    }
+    targets.forEach(function(t){ grid.appendChild(pointCard(t)); });
+
+    var wan = doc.wan || {};
+    if (wan.mbps || wan.ts){
+      document.getElementById("wan-wrap").style.display = "";
+      document.getElementById("wan-mbps").innerHTML = (wan.mbps ? fmt(wan.mbps) : "—") +
+        "<small>Mbps</small>";
+      document.getElementById("wan-ttfb").textContent =
+        wan.ttfb_ms ? fmt(wan.ttfb_ms) + " ms" : "—";
+      document.getElementById("wan-when").textContent = wan.ts ? ago(wan.ts) : "—";
+      var chart = document.getElementById("wan-chart");
+      chart.parentNode.replaceChild(wanChart(wan.history), chart);
+      document.getElementById("wan-note").textContent = wan.stale
+        ? "Last known reading, carried forward — the speed test is rate-limited, so this " +
+          "number refreshes on a longer interval than the latency probes."
+        : "A fixed-size download timed across the collector's own uplink, so it measures the " +
+          "path the collector sits on, not your ISP's marketing figure.";
+    }
+
+    var wrap = document.getElementById("svc-wrap");
+    var box = document.getElementById("services");
+    box.innerHTML = "";
+    if (services.length){
+      wrap.style.display = "";
+      services.forEach(function(s){
+        var row = el("div", "s");
+        var dot2 = el("span", "dot" + (s.up ? "" : " bad"));
+        row.appendChild(dot2);
+        row.appendChild(el("span", "nm", s.name));
+        row.appendChild(el("span", "ms", s.code ? "HTTP " + s.code : (s.err || "no response")));
+        row.appendChild(el("span", "ms", Math.round(s.ms) + " ms"));
+        box.appendChild(row);
+      });
+    } else {
+      wrap.style.display = "none";
+    }
+  }
+
+  fetch(DATA_URL, {cache: "no-store"})
+    .then(function(r){
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    })
+    .then(render)
+    .catch(function(err){
+      document.getElementById("sub").textContent =
+        "no data yet — " + DATA_URL + " (" + err.message + "). The collector writes it on its first run.";
+      document.getElementById("dot").className = "dot warn";
+    });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+[Unit]
+Description=netwatch every 5 minutes
+
+[Timer]
+# First sample shortly after boot, then every 5 minutes.
+OnBootSec=1min
+OnUnitActiveSec=5min
+AccuracySec=10s
+Unit=netwatch@%i.service
+
+[Install]
+WantedBy=timers.target

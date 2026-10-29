@@ -1,0 +1,11 @@
+# runtime artifacts — never commit these
+netwatch.json
+data.json
+state.json
+*.tmp
+__pycache__/
+*.pyc
+
+# local
+.DS_Store
+node_modules/

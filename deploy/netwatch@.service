@@ -1,0 +1,15 @@
+[Unit]
+Description=netwatch — one-shot home network health sample
+Documentation=https://github.com/hilltopventuregroup/netwatch
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Adjust User/ExecStart/config path to match your box.
+User=%i
+WorkingDirectory=/home/%i/netwatch
+Environment=NETWATCH_CONFIG=/home/%i/netwatch/netwatch.json
+ExecStart=/usr/bin/python3 /home/%i/netwatch/netwatch.py
+# Nothing to clean up: the script writes its own JSON atomically.
+Nice=10
