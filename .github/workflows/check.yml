@@ -1,0 +1,41 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Collector compiles
+        run: python -m py_compile netwatch.py
+
+      - name: Example config is valid JSON with targets
+        run: |
+          python - <<'PY'
+          import json
+          d = json.load(open("netwatch.example.json"))
+          assert d["targets"], "no targets in example config"
+          assert d["services"], "no services in example config"
+          print(f"ok — {len(d['targets'])} targets, {len(d['services'])} services")
+          PY
+
+      - name: Starter config printed by --print-example parses
+        run: python netwatch.py --print-example | python -m json.tool > /dev/null
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Dashboard renders in jsdom
+        run: |
+          npm i --no-save jsdom > /dev/null
+          node tests/render_check.js

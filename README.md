@@ -90,7 +90,7 @@ or whatever `--config` / `$NETWATCH_CONFIG` points at.
   "page_url": "http://netwatch.lan/netwatch/",
   "lan_prefix": "192.168.1",
   "out_dir": "~/netwatch/data",
-  "pushgateway": "http://127.0.0.1:9091/metrics/job/netwatch",
+  "pushgateway": "",
   "history_len": 288,
   "ping": { "count": 10, "interval": 0.2, "timeout": 1.0 },
   "speedtest": { "enabled": false, "interval_s": 1800, "bytes": 25000000 },
@@ -129,16 +129,26 @@ or whatever `--config` / `$NETWATCH_CONFIG` points at.
 Status is derived, not configured: `up` = loss ≤ `degraded_loss_pct`,
 `degraded` = lossy but some replies, `down` = 100 % loss.
 
+A service counts as `up` if the HTTP response is below 500 — a `401` or `403`
+still proves something is listening and speaking HTTP, which is the question
+being asked. `5xx`, connection refused, timeout and DNS failure all read as
+down. Set `page_url` if you want the page's own address in alert text.
+
 ## Alerting, exactly
 
 ```
-sample 1: 4 lost of 10      → nothing (bad_run=1)
-sample 2: 10 lost of 10     → nothing (bad_run=2, but level did not escalate)
-sample 3: 10 lost of 10     → "DOWN: NAS (192.168.1.10) — 100% loss"
-sample 4…: still down        → nothing (state unchanged, no repeat spam)
-sample N: replies again      → "RECOVERED: NAS (…) if the episode lasted ≥ blip_suppress_s,
-                                otherwise silence
+sample 1:  4 of 10 replies lost → nothing            (bad_run=1, below debounce=2)
+sample 2:  6 of 10 replies lost → "DEGRADED: NAS (192.168.1.10) — 60% loss"
+sample 3: 10 of 10 lost         → "DOWN: NAS (192.168.1.10) — 100% loss"
+sample 4…: still down           → nothing            (state held, no repeat spam)
+sample N:  replies again        → "RECOVERED: NAS (…)" only if the episode
+                                  lasted ≥ blip_suppress_s, else silence
 ```
+
+`debounce_samples: 2` means the first bad sample is always patient, and a target
+that goes straight to 100 % loss is announced on the *second* bad sample —
+~10 minutes in at a 5-minute cadence. Escalations are separate events, so a
+point that degrades and then dies is one message, then one more.
 
 - `alert_status` in `state.json` is **what you were last told**, tracked
   separately from the live reading. The page records every blip; the chat does
@@ -163,6 +173,7 @@ Pushed with `job="netwatch"`:
 | `netwatch_service_up` | `svc` | 1 = service answered |
 | `netwatch_wan_down_mbps` | — | only when the speed test ran |
 | `netwatch_wan_ttfb_ms` | — | only when the speed test ran |
+| `netwatch_last_run_seconds` | — | unix time of the sample — alert on staleness with this |
 
 Because this pushes rather than exposes, a `job` scrape config is not needed —
 just point `pushgateway` at your pushgateway. No pushgateway? Use the textfile
@@ -186,11 +197,13 @@ netwatch_up == 0 and (time() - timestamp(netwatch_up == 0)) > 900
 quantile_over_time(0.95, netwatch_latency_avg_ms[1h])
 ```
 
-**Pushgateway caveat:** pushed metrics are not expired. If netwatch dies, the
-last values stick and `netwatch_up` keeps reading 1. Alert on
-`time() - netwatch_pushed_timestamp > 900` (add a `netwatch_last_run_seconds`
-gauge if you want it explicit) or watch the pushgateway's own
-`push_time_seconds` for staleness.
+**Pushgateway caveat:** pushed metrics are never expired. If netwatch dies, the
+last values stick and `netwatch_up` keeps reading 1 — a monitor that fails
+silently is worse than no monitor. Alert on it:
+
+```promql
+time() - netwatch_last_run_seconds > 900   # no sample in 15 min
+```
 
 ## Scheduling
 
@@ -248,6 +261,8 @@ deploy/netwatch@.service  systemd unit (oneshot)
 deploy/netwatch@.timer    5-minute timer
 deploy/crontab.example    plain cron
 deploy/agent-scheduler.md scheduler-agnostic notes
+tests/render_check.js     optional jsdom render check for the page
+tests/fixture-data.json   sample data covering up / degraded / down / stale
 ```
 
 At runtime, `out_dir` gets `data.json` (page data, rolling history) and

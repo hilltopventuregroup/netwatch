@@ -12,6 +12,16 @@ const dataPath = process.argv[3] || path.join(here, "fixture-data.json");
 const html = fs.readFileSync(htmlPath, "utf8");
 const fixture = JSON.parse(fs.readFileSync(dataPath, "utf8"));
 
+// Cheap guard against the classic footgun: passing data.json as the first
+// argument, which "renders" an empty document and then fails every assertion.
+if (!html.includes('id="points"')) {
+  console.error(
+    `not a netwatch dashboard page: ${htmlPath}\n` +
+    `usage: node tests/render_check.js [dashboard/index.html] [data.json]`
+  );
+  process.exit(2);
+}
+
 const errors = [];
 const vc = new VirtualConsole();
 vc.on("jsdomError", (e) => errors.push("jsdomError: " + e.message));

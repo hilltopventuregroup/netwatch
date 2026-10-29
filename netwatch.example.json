@@ -4,7 +4,7 @@
   "lan_prefix": "192.168.1",
   "out_dir": "~/netwatch/data",
   "summary_path": "",
-  "pushgateway": "http://127.0.0.1:9091/metrics/job/netwatch",
+  "pushgateway": "",
   "history_len": 288,
   "ping": {
     "count": 10,

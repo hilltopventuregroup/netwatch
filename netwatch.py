@@ -71,7 +71,7 @@ EXAMPLE_CONFIG = {
     "lan_prefix": "192.168.1",
     "out_dir": "~/netwatch/data",
     "summary_path": "",
-    "pushgateway": "http://127.0.0.1:9091/metrics/job/netwatch",
+    "pushgateway": "",
     "history_len": 288,
     "ping": {"count": 10, "interval": 0.2, "timeout": 1.0},
     "speedtest": {"enabled": False, "interval_s": 1800, "bytes": 25000000},
@@ -514,6 +514,11 @@ def measure(cfg):
         services.append({"id": s["id"], "name": s["name"], "url": s["url"], **r})
         push_lines.append(f'netwatch_service_up{{svc="{esc(s["id"])}"}} {1 if r["up"] else 0}')
 
+    # Staleness guard: a pushgateway never expires metrics, so if this process
+    # dies the last values would keep reading healthy forever. This timestamp is
+    # what you alert on (see README).
+    push_lines.append(f"netwatch_last_run_seconds {now}")
+
     doc = {
         "updated": iso,
         "updated_epoch": now,
@@ -635,6 +640,9 @@ def main(argv=None):
     pushed = push_gateway(cfg.get("pushgateway"), push_lines)
 
     page = f" — {cfg['page_url']}" if cfg.get("page_url") else ""
+    pg_note = ""
+    if cfg.get("pushgateway"):
+        pg_note = f" (pushgateway: {'ok' if pushed else 'unreachable'})"
     if not prev.get("announced"):
         # First ever run: say so once, so silence afterwards means "all well"
         # rather than "the cron was never installed".
@@ -642,8 +650,7 @@ def main(argv=None):
         write_json(state_path, prev)
         print(f"netwatch is live — {len(doc['targets'])} network points + "
               f"{len(doc['services'])} service"
-              f"{'' if len(doc['services']) == 1 else 's'}{page} "
-              f"(pushgateway: {'ok' if pushed else 'off/unreachable'})")
+              f"{'' if len(doc['services']) == 1 else 's'}{page}{pg_note}")
         return 0
     if alerts:
         print("netwatch: " + " | ".join(alerts) + page)
